@@ -2,3 +2,4 @@
 /__pycache__
 dct_tests.py
 huffman_coding_tests.py
+/.vscode

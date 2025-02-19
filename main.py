@@ -27,27 +27,11 @@ def create_jpeg_pyfile(filepath: str, output_file_name: str) -> bytes:
                  optimize=True)
         
         #print(output.tell())
+        Image.open(output).save("images/out/sunset_out.jpg")
         #Image.open(output).show()
         
         with open(output_file_name, "w") as out_file:
             out_file.write("buffer = " + str(output.getvalue()))
-
-class Stream:
-    def __init__(self, buffer):
-        self.buffer = buffer
-        self._bit_pos = 0
-
-    def read_bit(self) -> int:
-        byte = self.buffer[self._bit_pos // 8]
-        bit = (byte >> 7 - self._bit_pos % 8) & 1
-        self._bit_pos += 1
-        return bit
-    
-    def get_bits_value(self, nbits) -> int:
-        result = 0
-        for _ in range(nbits):
-            result = result * 2 + self.read_bit()
-        return result
 
 def bits_from_lengths(root: list | int, element: int, pos: int) -> bool:
     """
@@ -84,25 +68,6 @@ def create_huffman_tree(lengths: list[int], elements: list[int]) -> list[int]:
             element_idx += 1
 
     return tree
-
-class HuffmanTable:
-    def __init__(self, lengths: list[int], elements: list[int]):
-        self.tree = []
-        self._init_tree(lengths, elements)
-
-    def _find(self, stream: Stream):
-        result = self.tree
-        while isinstance(result, list):
-            result = result[stream.read_bit()]
-        return result
-    
-    def get_code(self, stream: Stream):
-        while True:
-            result = self._find(stream)
-            if result == 0:
-                return 0
-            elif result != -1:
-                return result
 
 class BitStream:
     def __init__(self, buffer: bytes):
@@ -164,13 +129,25 @@ class JpegDecoder:
     def _decode_number(code, bits):
         l = 2 ** (code - 1)
         return bits if bits >= l else bits - (2 * l - 1)
-
-
-    @staticmethod
-    def _get_zigzag_index(index: int) -> int:
-        zigzag = b'\x00\x01\x05\x06\x0e\x0f\x1b\x1c\x02\x04\x07\r\x10\x1a\x1d*\x03\x08\x0c\x11\x19\x1e)+\t\x0b\x12\x18\x1f(,5\n\x13\x17 \'-46\x14\x16!&.37<\x15"%/28;=#$019:>?'
-        return zigzag[index]
     
+    @staticmethod
+    def _zigzag(coeffs):
+        zigzag = [
+            0, 1, 5, 6, 14, 15, 27, 28,
+            2, 4, 7, 13, 16, 26, 29, 42,
+            3, 8, 12, 17, 25, 30, 41, 43,
+            9, 11, 18, 24, 31, 40, 44, 53,
+            10, 19, 23, 32, 39, 45, 52, 54,
+            20, 22, 33, 38, 46, 51, 55, 60,
+            21, 34, 37, 47, 50, 56, 59, 61,
+            35, 36, 48, 49, 57, 58, 62, 63,
+        ]
+
+        for i in range(64):
+            zigzag[i] = coeffs[zigzag[i]]
+
+        return zigzag
+
     def _get_scan(self):
         new_buffer = bytearray()
 
@@ -199,7 +176,7 @@ class JpegDecoder:
     
     @staticmethod
     def _get_norm(x):
-        return sqrt(1.0 / 8) if x == 0 else sqrt(2.0 / 8)
+        return 1 / sqrt(2) if x == 0 else 1
     
     @staticmethod
     def _YCbCr_to_rgb(Y: int, Cb: int, Cr: int) -> tuple[int, int, int]:
@@ -212,21 +189,22 @@ class JpegDecoder:
         b = max(0, min(255, round(b)))
 
         return (r, g, b)
-    
+
     def _idct(self, coeffs):
-        output = [[0] * 8] * 8
-        for x in range(8):
-            for y in range(8):
+        output = [[0 for _ in range(8)] for _ in range(8)]
+        for y in range(8):
+            for x in range(8):
                 coeff = 0
-                for n in range(8):
-                    for p in range(8):
+                for n1 in range(8):
+                    for n2 in range(8):
                         coeff += (
-                            self._get_norm(n) * self._get_norm(p)
-                            * coeffs[n * 8 + p]
-                            * self.idct_table[n][x]
-                            * self.idct_table[p][y])
+                            self._get_norm(n1) * self._get_norm(n2)
+                            * coeffs[n1 * 8 + n2]
+                            * cos((pi / 8) * (y + 0.5) * n2)
+                            * cos((pi / 8) * (x + 0.5) * n1)
+                            )
                         
-                output[x][y] = round(coeff + 128)
+                output[y][x] = round(coeff / 4) + 128
 
         return output
 
@@ -249,12 +227,12 @@ class JpegDecoder:
                 category &= 0x0F
 
             bits = stream.read(category)
+            
+            coeff = self._decode_number(category, bits)
+            result[i] = coeff * quant[i]
+            i += 1
 
-            if i < 64:
-                coeff = self._decode_number(category, bits)
-                result[self._get_zigzag_index(i)] = coeff * quant[i]
-                i += 1
-
+        result = self._zigzag(result)
         result = self._idct(result)
         return result, dc_coeff
 
@@ -312,7 +290,7 @@ class JpegDecoder:
                                         output[out_y][out_x] = c
 
                     Image.fromarray(output).show()
-                    Image.fromarray(output).save("images/sunser_out.jpeg")
+                    Image.fromarray(output).save("images/out/sunset_dec.jpg")
                     self._goto(2, False)
 
                 elif marker == "DHT":
@@ -382,6 +360,6 @@ class JpegDecoder:
         """
         self._pos += nbytes
 
-#img_bytes = create_jpeg_pyfile("images/sunset.png", "out.py")
+img_bytes = create_jpeg_pyfile("images/sunset.png", "out.py")
 from out import buffer
 decoder = JpegDecoder(buffer)
