@@ -1,6 +1,7 @@
 from PIL import Image
-import numpy as np
 from math import cos, pi, sqrt, ceil
+
+from kandinsky import set_pixel, display
 
 def bits_from_lengths(root: list | int, element: int, pos: int) -> bool:
     """
@@ -111,8 +112,6 @@ class JpegDecoder:
         
         old_y_coeff = old_cb_coeff = old_cr_coeff = 0
 
-        output = np.zeros((self.height, self.width, 3), dtype=np.uint8)
-
         for y in range(ceil(self.height / (8 * self.sampling[1]))):
             for x in range(ceil(self.width / (8 * self.sampling[0]))):
                 mat_ys = []
@@ -123,11 +122,9 @@ class JpegDecoder:
                 mat_cb, old_cb_coeff = self._build_matrix(self.components[2], old_cb_coeff)
                 mat_cr, old_cr_coeff = self._build_matrix(self.components[3], old_cr_coeff)
 
-                self.update_output(x, y, mat_ys, mat_cb, mat_cr, output)
+                self.update_output(x, y, mat_ys, mat_cb, mat_cr)
 
-        Image.fromarray(output).show()
-
-    def update_output(self, x, y, mat_ys, mat_cb, mat_cr, output):
+    def update_output(self, x, y, mat_ys, mat_cb, mat_cr):
         for i in range(len(mat_ys)):
             for yy in range(8):
                 for xx in range(8):
@@ -147,8 +144,8 @@ class JpegDecoder:
                         mat_cb[cb_cr_x][cb_cr_y],
                         mat_cr[cb_cr_x][cb_cr_y]
                     )
-                
-                    output[out_y][out_x] = c
+
+                    set_pixel(out_x, out_y, c)
 
     def decode(self) -> None:
         while True: 
@@ -325,3 +322,4 @@ class JpegDecoder:
 
 from out import buffer
 JpegDecoder(buffer)
+display()
