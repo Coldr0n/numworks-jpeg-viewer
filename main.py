@@ -38,27 +38,10 @@ def create_huffman_tree(lengths: list[int], elements: list[int]) -> list[int]:
 
     return tree
 
-class BitStream:
-    def __init__(self, buffer: bytes):
-        self.buffer = buffer
-        self._pos = 0
-
-    def get_bit(self) -> bool:
-        byte = self.buffer[self._pos // 8]
-        bit: bool = bool((byte >> (7 - self._pos % 8)) & 1)
-        self._pos += 1
-        return bit
-
-    def read(self, nbits: int) -> int:
-        result = 0
-        for _ in range(nbits):
-            result = (result << 1) + self.get_bit()
-        return result 
-
 class JpegDecoder:
     def __init__(self, buffer: bytes) -> None:
         self.buffer: bytes = buffer
-        self._pos: int = 0
+        self.bit_pos: int = 0
         self.components = {}
         self.huffman_tables: dict[int, list[int]] = {}
         self.quant_tables: dict[int, bytes] = {}
@@ -67,6 +50,18 @@ class JpegDecoder:
         self.height = 0
 
         self.decode()
+
+    def get_bit(self) -> bool:
+        byte = self.buffer[self.bit_pos // 8]
+        bit: bool = bool((byte >> (7 - self.bit_pos % 8)) & 1)
+        self.bit_pos += 1
+        return bit
+
+    def read_bit(self, nbits: int) -> int:
+        result = 0
+        for _ in range(nbits):
+            result = (result << 1) + self.get_bit()
+        return result
 
     def define_huffman_table(self):
         self._skip(2) # Table length
@@ -112,7 +107,7 @@ class JpegDecoder:
         self._skip(3)
 
     def parse_scan(self):
-        stream = BitStream(self._get_scan())
+        self._remove_ff()
         
         old_y_coeff = old_cb_coeff = old_cr_coeff = 0
 
@@ -122,16 +117,15 @@ class JpegDecoder:
             for x in range(ceil(self.width / (8 * self.sampling[0]))):
                 mat_ys = []
                 for i in range(self.sampling[0] * self.sampling[1]):
-                    mat_y, old_y_coeff = self._build_matrix(self.components[1], stream, old_y_coeff)
+                    mat_y, old_y_coeff = self._build_matrix(self.components[1], old_y_coeff)
                     mat_ys.append(mat_y)
 
-                mat_cb, old_cb_coeff = self._build_matrix(self.components[2], stream, old_cb_coeff)
-                mat_cr, old_cr_coeff = self._build_matrix(self.components[3], stream, old_cr_coeff)
+                mat_cb, old_cb_coeff = self._build_matrix(self.components[2], old_cb_coeff)
+                mat_cr, old_cr_coeff = self._build_matrix(self.components[3], old_cr_coeff)
 
                 self.update_output(x, y, mat_ys, mat_cb, mat_cr, output)
 
         Image.fromarray(output).show()
-        self._goto(2, False)
 
     def update_output(self, x, y, mat_ys, mat_cb, mat_cr, output):
         for i in range(len(mat_ys)):
@@ -181,7 +175,7 @@ class JpegDecoder:
                     chunk_length = self._peak(2)
                     self._skip(chunk_length)
 
-            if self._pos >= len(self.buffer):
+            if self.bit_pos // 8 >= len(self.buffer):
                 break
 
     @staticmethod
@@ -218,29 +212,29 @@ class JpegDecoder:
 
         return zigzag
 
-    def _get_scan(self):
-        new_buffer = bytearray()
-
+    def _remove_ff(self):
+        new_buffer = bytes()
         while True:
-            current_byte = self._read(1)
+            current_byte = self._read(1, False)
 
-            if current_byte == 0xFF:
+            if current_byte == b'\xFF':
                 next_byte = self._peak(1)
 
                 if next_byte == 0x00:
-                    new_buffer.append(current_byte)
+                    new_buffer += current_byte
                     self._skip(1)
                 else: break
 
-            else: new_buffer.append(current_byte)
+            else: new_buffer += current_byte
 
-        return bytes(new_buffer)
+        self.buffer = new_buffer
+        self.bit_pos = 0
     
-    def _get_category(self, huffman_tree: list, stream: BitStream) -> int:
+    def _get_category(self, huffman_tree: list) -> int:
         result = huffman_tree
 
         while isinstance(result, list):
-            result = result[stream.get_bit()]
+            result = result[self.get_bit()]
 
         return result
     
@@ -278,25 +272,25 @@ class JpegDecoder:
 
         return output
 
-    def _build_matrix(self, component, stream: BitStream, old_dc_coeff):
+    def _build_matrix(self, component, old_dc_coeff):
         quant = self.quant_tables[component["quant_mapping"]]
 
-        category = self._get_category(self.huffman_tables[component["DC"]], stream)
-        bits = stream.read(category)
+        category = self._get_category(self.huffman_tables[component["DC"]])
+        bits = self.read_bit(category)
         dc_coeff = self._decode_number(category, bits) + old_dc_coeff
         
         result = [0] * 64
         result[0] = dc_coeff * quant[0]
         i = 1
         while i < 64:
-            category = self._get_category(self.huffman_tables[16 + component["AC"]], stream)
+            category = self._get_category(self.huffman_tables[16 + component["AC"]])
             if category == 0: break
 
             if category > 15:
                 i += category >> 4
                 category &= 0x0F
 
-            bits = stream.read(category)
+            bits = self.read_bit(category)
             
             coeff = self._decode_number(category, bits)
             result[i] = coeff * quant[i]
@@ -306,32 +300,28 @@ class JpegDecoder:
         result = self._idct(result)
         return result, dc_coeff
 
-    def _goto(self, position: int, from_start: bool = True) -> None:
-        """
-        Change the _pos attribute relative to start or end of the buffer
-        """
-        self._pos = position if from_start else len(self.buffer) - position
-
     def _read(self, nbytes: int, to_int: bool = True) -> bytes | int:
         """
         Read a block of data from the buffer and returns it
         """
-        data = self.buffer[self._pos : self._pos + nbytes]
-        self._pos += nbytes
+        pos = self.bit_pos // 8
+        data = self.buffer[pos : pos + nbytes]
+        self.bit_pos += nbytes * 8
         return self._from_bytes(data) if to_int else data
     
     def _peak(self, nbytes: int, to_int: bool = True, offset: int = 0) -> bytes | int:
         """
         Same as the _read method but doesn't change the _pos attribute
         """
-        data = self.buffer[self._pos + offset : self._pos + offset + nbytes]
+        pos = self.bit_pos // 8
+        data = self.buffer[pos + offset : pos + offset + nbytes]
         return self._from_bytes(data) if to_int else data
 
     def _skip(self, nbytes: int) -> None:
         """
         Skip a number of bytes of the buffer
         """
-        self._pos += nbytes
+        self.bit_pos += nbytes * 8
 
 from out import buffer
 JpegDecoder(buffer)
