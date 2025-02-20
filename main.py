@@ -56,20 +56,6 @@ class BitStream:
         return result 
 
 class JpegDecoder:
-    markers = {
-        0xFFD8: "SOI",  # Start Of Image
-        0xFFE0: "APP0", # Application specific header
-        0xFFC0: "SOF0", # Start of Frame
-        0xFFC4: "DHT",  # Define Huffman Table
-        0xFFDB: "DQT",  # Define Quantization Table
-        0xFFDD: "DRI",  # Define Restart Interval
-        0xFFDA: "SOS",  # Start Of Scan
-        0xFFFE: "COM",  # Comment
-        0xFFD9: "EOI"  # End of Image
-    }
-
-    idct_table = [[ cos((pi / 8) * (n + 0.5) * k) for n in range(8) ] for k in range(8) ]
-
     def __init__(self, buffer: bytes) -> None:
         self.buffer: bytes = buffer
         self._pos: int = 0
@@ -80,7 +66,123 @@ class JpegDecoder:
         self.width = 0
         self.height = 0
 
-        self.log_markers()
+        self.decode()
+
+    def define_huffman_table(self):
+        self._skip(2) # Table length
+        table_info = self._read(1)
+                    
+        lengths = [self._read(1) for _ in range(16)]
+        elements = []
+        for byte_length in lengths:
+            elements += (self._read(1) for _ in range(byte_length))
+
+        table = create_huffman_tree(lengths, elements)
+        self.huffman_tables[table_info] = table
+
+    def define_quantization_table(self):
+        self._skip(2) # Table length
+        table_info = self._read(1)
+        qt_data = self._read(64, False)
+        self.quant_tables[table_info] = qt_data
+
+    def parse_frame_header(self):
+        self._skip(3) # Table length and data precision
+        self.height = self._read(2)
+        self.width = self._read(2)
+        nb_components = self._read(1)
+        
+        for _ in range(nb_components):
+            component_id = self._read(1)
+            self.sampling[0] = max(self.sampling[0], self._peak(1) >> 4)
+            self.sampling[1] = max(self.sampling[1], self._read(1) & 0xF)
+            component = {
+                "quant_mapping": self._read(1)
+            }
+            self.components[component_id] = component
+
+    def parse_scan_header(self):
+        self._skip(2) # Header size
+        nb_components = self._read(1)
+        for _ in range(nb_components):
+            component_id = self._read(1)
+            self.components[component_id]["DC"] = self._peak(1) >> 4
+            self.components[component_id]["AC"] = self._read(1) & 0xF
+
+        self._skip(3)
+
+    def parse_scan(self):
+        stream = BitStream(self._get_scan())
+        
+        old_y_coeff = old_cb_coeff = old_cr_coeff = 0
+
+        output = np.zeros((self.height, self.width, 3), dtype=np.uint8)
+
+        for y in range(ceil(self.height / (8 * self.sampling[1]))):
+            for x in range(ceil(self.width / (8 * self.sampling[0]))):
+                mat_ys = []
+                for i in range(self.sampling[0] * self.sampling[1]):
+                    mat_y, old_y_coeff = self._build_matrix(self.components[1], stream, old_y_coeff)
+                    mat_ys.append(mat_y)
+
+                mat_cb, old_cb_coeff = self._build_matrix(self.components[2], stream, old_cb_coeff)
+                mat_cr, old_cr_coeff = self._build_matrix(self.components[3], stream, old_cr_coeff)
+
+                self.update_output(x, y, mat_ys, mat_cb, mat_cr, output)
+
+        Image.fromarray(output).show()
+        self._goto(2, False)
+
+    def update_output(self, x, y, mat_ys, mat_cb, mat_cr, output):
+        for i in range(len(mat_ys)):
+            for yy in range(8):
+                for xx in range(8):
+                    global_x = xx + 8 * (i % self.sampling[0])
+                    global_y = yy + 8 * (i // self.sampling[1])
+
+                    out_x = x * (8 * self.sampling[0]) + global_x
+                    out_y = y * (8 * self.sampling[1]) + global_y
+
+                    if out_y >= self.height:
+                        break # End of scan (padding values)
+
+                    cb_cr_x = global_x // self.sampling[0]
+                    cb_cr_y = global_y // self.sampling[1]
+                    c = self._YCbCr_to_rgb(
+                        mat_ys[i][xx][yy],
+                        mat_cb[cb_cr_x][cb_cr_y],
+                        mat_cr[cb_cr_x][cb_cr_y]
+                    )
+                
+                    output[out_y][out_x] = c
+
+    def decode(self) -> None:
+        while True: 
+            marker: int = self._read(2)
+            if marker == 0xFFD8: # Start Of Image
+                pass
+            elif marker == 0xFFD9: # End Of Image
+                return
+            else:
+                if marker == 0xFFDA: # Start Of Scan
+                    self.parse_scan_header()
+                    self.parse_scan()
+
+                elif marker == 0xFFC4:
+                    self.define_huffman_table()
+                
+                elif marker == 0xFFDB:
+                    self.define_quantization_table()
+
+                elif marker == 0xFFC0: # Start Of Frame
+                    self.parse_frame_header()
+
+                else:
+                    chunk_length = self._peak(2)
+                    self._skip(chunk_length)
+
+            if self._pos >= len(self.buffer):
+                break
 
     @staticmethod
     def _from_bytes(data: bytes) -> int:
@@ -204,104 +306,6 @@ class JpegDecoder:
         result = self._idct(result)
         return result, dc_coeff
 
-    def log_markers(self) -> None:
-        while True: 
-            marker = self.markers.get(self._read(2), "NULL")
-            if marker == "SOI":
-                pass
-            elif marker == "EOI":
-                return
-            else:
-                if marker == "SOS":
-                    self._skip(2) # Header size
-                    nb_components = self._read(1)
-                    for _ in range(nb_components):
-                        component_id = self._read(1)
-                        self.components[component_id]["DC"] = self._peak(1) >> 4
-                        self.components[component_id]["AC"] = self._read(1) & 0xF
-
-                    self._skip(3)
-                    stream = BitStream(self._get_scan())
-                    
-                    old_y_coeff = old_cb_coeff = old_cr_coeff = 0
-
-                    output = np.zeros((self.height, self.width, 3), dtype=np.uint8)
-
-                    for y in range(ceil(self.height / (8 * self.sampling[1]))):
-                        for x in range(ceil(self.width / (8 * self.sampling[0]))):
-                            mat_ys = []
-                            for i in range(self.sampling[0] * self.sampling[1]):
-                                mat_y, old_y_coeff = self._build_matrix(self.components[1], stream, old_y_coeff)
-                                mat_ys.append(mat_y)
-
-                            mat_cb, old_cb_coeff = self._build_matrix(self.components[2], stream, old_cb_coeff)
-                            mat_cr, old_cr_coeff = self._build_matrix(self.components[3], stream, old_cr_coeff)
-
-                            for i in range(len(mat_ys)):
-                                for yy in range(8):
-                                    for xx in range(8):
-                                        global_x = xx + 8 * (i % self.sampling[0])
-                                        global_y = yy + 8 * (i // self.sampling[1])
-
-                                        out_x = x * (8 * self.sampling[0]) + global_x
-                                        out_y = y * (8 * self.sampling[1]) + global_y
-
-                                        if out_y >= self.height:
-                                            break # End of scan (padding values)
-
-                                        cb_cr_x = global_x // self.sampling[0]
-                                        cb_cr_y = global_y // self.sampling[1]
-                                        c = self._YCbCr_to_rgb(
-                                            mat_ys[i][xx][yy],
-                                            mat_cb[cb_cr_x][cb_cr_y],
-                                            mat_cr[cb_cr_x][cb_cr_y]
-                                        )
-                                    
-                                        output[out_y][out_x] = c
-
-                    Image.fromarray(output).show()
-                    self._goto(2, False)
-
-                elif marker == "DHT":
-                    self._skip(2) # Table length
-                    table_info = self._read(1)
-                    
-                    lengths = [self._read(1) for _ in range(16)]
-                    elements = []
-                    for byte_length in lengths:
-                        elements += (self._read(1) for _ in range(byte_length))
-
-                    table = create_huffman_tree(lengths, elements)
-                    self.huffman_tables[table_info] = table
-                
-                elif marker == "DQT":
-                    self._skip(2) # Table length
-                    table_info = self._read(1)
-                    qt_data = self._read(64, False)
-                    self.quant_tables[table_info] = qt_data
-
-                elif marker == "SOF0":
-                    self._skip(3) # Table length and data precision
-                    self.height = self._read(2)
-                    self.width = self._read(2)
-                    nb_components = self._read(1)
-                    
-                    for _ in range(nb_components):
-                        component_id = self._read(1)
-                        self.sampling[0] = max(self.sampling[0], self._peak(1) >> 4)
-                        self.sampling[1] = max(self.sampling[1], self._read(1) & 0xF)
-                        component = {
-                            "quant_mapping": self._read(1)
-                        }
-                        self.components[component_id] = component
-
-                else:
-                    chunk_length = self._peak(2)
-                    self._skip(chunk_length)
-
-            if self._pos >= len(self.buffer):
-                break
-
     def _goto(self, position: int, from_start: bool = True) -> None:
         """
         Change the _pos attribute relative to start or end of the buffer
@@ -330,4 +334,4 @@ class JpegDecoder:
         self._pos += nbytes
 
 from out import buffer
-decoder = JpegDecoder(buffer)
+JpegDecoder(buffer)
