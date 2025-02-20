@@ -1,7 +1,7 @@
 from PIL import Image
 from io import BytesIO
 import numpy as np
-from math import cos, pi, sqrt
+from math import cos, pi, sqrt, ceil
 
 NUMWORKS_SIZE = 320, 222
 
@@ -257,8 +257,8 @@ class JpegDecoder:
 
                     output = np.zeros((self.height, self.width, 3), dtype=np.uint8)
 
-                    for y in range(self.height // (8 * self.sampling[1])):
-                        for x in range(self.width // (8 * self.sampling[0])):
+                    for y in range(ceil(self.height / (8 * self.sampling[1]))):
+                        for x in range(ceil(self.width / (8 * self.sampling[0]))):
                             mat_ys = []
                             for i in range(self.sampling[0] * self.sampling[1]):
                                 mat_y, old_y_coeff = self._build_matrix(self.components[1], stream, old_y_coeff)
@@ -270,9 +270,14 @@ class JpegDecoder:
                             for i in range(len(mat_ys)):
                                 for yy in range(8):
                                     for xx in range(8):
-
                                         global_x = xx + 8 * (i % self.sampling[0])
                                         global_y = yy + 8 * (i // self.sampling[1])
+
+                                        out_x = x * (8 * self.sampling[0]) + global_x
+                                        out_y = y * (8 * self.sampling[1]) + global_y
+
+                                        if out_y >= self.height:
+                                            break # End of scan (padding values)
 
                                         cb_cr_x = global_x // self.sampling[0]
                                         cb_cr_y = global_y // self.sampling[1]
@@ -281,10 +286,7 @@ class JpegDecoder:
                                             mat_cb[cb_cr_x][cb_cr_y],
                                             mat_cr[cb_cr_x][cb_cr_y]
                                         )
-                                        
-                                        out_x = x * (8 * self.sampling[0]) + global_x
-                                        out_y = y * (8 * self.sampling[1]) + global_y
-                                        
+                                    
                                         output[out_y][out_x] = c
 
                     Image.fromarray(output).show()
@@ -360,4 +362,3 @@ class JpegDecoder:
 #img_bytes = create_jpeg_pyfile("images/sunset.png", "out.py")
 from out import buffer
 decoder = JpegDecoder(buffer)
-# Checkout test
