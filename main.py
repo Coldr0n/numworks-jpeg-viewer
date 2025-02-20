@@ -360,3 +360,4 @@ class JpegDecoder:
 #img_bytes = create_jpeg_pyfile("images/sunset.png", "out.py")
 from out import buffer
 decoder = JpegDecoder(buffer)
+# Checkout test
