@@ -27,7 +27,6 @@ def create_jpeg_pyfile(filepath: str, output_file_name: str) -> bytes:
                  optimize=True)
         
         #print(output.tell())
-        Image.open(output).save("images/out/sunset_out.jpg")
         #Image.open(output).show()
         
         with open(output_file_name, "w") as out_file:
@@ -85,7 +84,6 @@ class BitStream:
         for _ in range(nbits):
             result = (result << 1) + self.get_bit()
         return result 
-
 
 class JpegDecoder:
     markers = {
@@ -290,7 +288,6 @@ class JpegDecoder:
                                         output[out_y][out_x] = c
 
                     Image.fromarray(output).show()
-                    Image.fromarray(output).save("images/out/sunset_dec.jpg")
                     self._goto(2, False)
 
                 elif marker == "DHT":
@@ -360,6 +357,6 @@ class JpegDecoder:
         """
         self._pos += nbytes
 
-img_bytes = create_jpeg_pyfile("images/sunset.png", "out.py")
+#img_bytes = create_jpeg_pyfile("images/sunset.png", "out.py")
 from out import buffer
 decoder = JpegDecoder(buffer)
