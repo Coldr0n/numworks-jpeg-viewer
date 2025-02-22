@@ -1,7 +1,8 @@
-from PIL import Image
 from math import cos, pi, sqrt, ceil
 
-from kandinsky import set_pixel, display
+from kandinsky import set_pixel
+
+import time
 
 def bits_from_lengths(root: list | int, element: int, pos: int) -> bool:
     """
@@ -40,6 +41,7 @@ def create_huffman_tree(lengths: list[int], elements: list[int]) -> list[int]:
     return tree
 
 class JpegDecoder:
+    idct_table = [[cos((pi / 8) * (p + 0.5) * n) * (1 / sqrt(2) if n == 0 else 1) for n in range(8)] for p in range(8)]
     def __init__(self, buffer: bytes) -> None:
         self.buffer: bytes = buffer
         self.bit_pos: int = 0
@@ -114,6 +116,7 @@ class JpegDecoder:
 
         for y in range(ceil(self.height / (8 * self.sampling[1]))):
             for x in range(ceil(self.width / (8 * self.sampling[0]))):
+                start = time.monotonic()
                 mat_ys = []
                 for i in range(self.sampling[0] * self.sampling[1]):
                     mat_y, old_y_coeff = self._build_matrix(self.components[1], old_y_coeff)
@@ -121,7 +124,8 @@ class JpegDecoder:
 
                 mat_cb, old_cb_coeff = self._build_matrix(self.components[2], old_cb_coeff)
                 mat_cr, old_cr_coeff = self._build_matrix(self.components[3], old_cr_coeff)
-
+                end = time.monotonic()
+                print(f"MCU computed in: {end - start:.3f}s")
                 self.update_output(x, y, mat_ys, mat_cb, mat_cr)
 
     def update_output(self, x, y, mat_ys, mat_cb, mat_cr):
@@ -236,10 +240,6 @@ class JpegDecoder:
         return result
     
     @staticmethod
-    def _get_norm(x):
-        return 1 / sqrt(2) if x == 0 else 1
-    
-    @staticmethod
     def _YCbCr_to_rgb(Y: int, Cb: int, Cr: int) -> tuple[int, int, int]:
         r = Y + 1.402 * (Cr - 128)
         g = Y - 0.34414 * (Cb - 128) - 0.714136 * (Cr - 128)
@@ -259,10 +259,9 @@ class JpegDecoder:
                 for n1 in range(8):
                     for n2 in range(8):
                         coeff += (
-                            self._get_norm(n1) * self._get_norm(n2)
-                            * coeffs[n1 * 8 + n2]
-                            * cos((pi / 8) * (y + 0.5) * n2)
-                            * cos((pi / 8) * (x + 0.5) * n1)
+                            coeffs[n1 * 8 + n2]
+                            * self.idct_table[y][n2]
+                            * self.idct_table[x][n1]
                             )
                         
                 output[y][x] = round(coeff / 4) + 128
@@ -322,4 +321,3 @@ class JpegDecoder:
 
 from out import buffer
 JpegDecoder(buffer)
-display()
