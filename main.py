@@ -42,6 +42,7 @@ def create_huffman_tree(lengths: list[int], elements: list[int]) -> list[int]:
 
 class JpegDecoder:
     idct_table = [[cos((pi / 8) * (p + 0.5) * n) * (1 / sqrt(2) if n == 0 else 1) for n in range(8)] for p in range(8)]
+    
     def __init__(self, buffer: bytes) -> None:
         self.buffer: bytes = buffer
         self.bit_pos: int = 0
@@ -51,82 +52,85 @@ class JpegDecoder:
         self.sampling = [0, 0]
         self.width = 0
         self.height = 0
+        self.times = [0, 0]
 
         self.decode()
+        #print(f"Average MCU's time: {self.times[0] / self.times[1]:.3f}ms")
 
-    def get_bit(self) -> bool:
-        byte = self.buffer[self.bit_pos // 8]
-        bit: bool = bool((byte >> (7 - self.bit_pos % 8)) & 1)
+    def get_bit(self):
+        byte = self.buffer[self.bit_pos >> 3]
+        bit = (byte >> (7 - self.bit_pos & 0x07)) & 1
         self.bit_pos += 1
         return bit
 
     def read_bit(self, nbits: int) -> int:
         result = 0
         for _ in range(nbits):
-            result = (result << 1) + self.get_bit()
+            result = (result << 1) | self.get_bit()
         return result
 
     def define_huffman_table(self):
-        self._skip(2) # Table length
-        table_info = self._read(1)
+        self.skip(2) # Table length
+        table_info = self.read(1)
                     
-        lengths = [self._read(1) for _ in range(16)]
+        lengths = [self.read(1) for _ in range(16)]
         elements = []
         for byte_length in lengths:
-            elements += (self._read(1) for _ in range(byte_length))
+            elements += (self.read(1) for _ in range(byte_length))
 
         table = create_huffman_tree(lengths, elements)
         self.huffman_tables[table_info] = table
 
     def define_quantization_table(self):
-        self._skip(2) # Table length
-        table_info = self._read(1)
-        qt_data = self._read(64, False)
+        self.skip(2) # Table length
+        table_info = self.read(1)
+        qt_data = self.read(64, False)
         self.quant_tables[table_info] = qt_data
 
     def parse_frame_header(self):
-        self._skip(3) # Table length and data precision
-        self.height = self._read(2)
-        self.width = self._read(2)
-        nb_components = self._read(1)
+        self.skip(3) # Table length and data precision
+        self.height = self.read(2)
+        self.width = self.read(2)
+        nb_components = self.read(1)
         
         for _ in range(nb_components):
-            component_id = self._read(1)
-            self.sampling[0] = max(self.sampling[0], self._peak(1) >> 4)
-            self.sampling[1] = max(self.sampling[1], self._read(1) & 0xF)
-            component = {
-                "quant_mapping": self._read(1)
-            }
-            self.components[component_id] = component
+            component_id = self.read(1)
+            self.sampling[0] = max(self.sampling[0], self.peak(1) >> 4)
+            self.sampling[1] = max(self.sampling[1], self.read(1) & 0xF)
+            self.components[component_id] = {"quant_mapping": self.read(1)}
 
     def parse_scan_header(self):
-        self._skip(2) # Header size
-        nb_components = self._read(1)
+        self.skip(2) # Header size
+        nb_components = self.read(1)
         for _ in range(nb_components):
-            component_id = self._read(1)
-            self.components[component_id]["DC"] = self._peak(1) >> 4
-            self.components[component_id]["AC"] = self._read(1) & 0xF
+            component_id = self.read(1)
+            self.components[component_id]["DC"] = self.peak(1) >> 4
+            self.components[component_id]["AC"] = self.read(1) & 0xF
 
-        self._skip(3)
+        self.skip(3)
 
     def parse_scan(self):
-        self._remove_ff()
+        self.remove_ff()
         
         old_y_coeff = old_cb_coeff = old_cr_coeff = 0
+
+        samplings = self.sampling[0] * self.sampling[1]
 
         for y in range(ceil(self.height / (8 * self.sampling[1]))):
             for x in range(ceil(self.width / (8 * self.sampling[0]))):
                 start = time.monotonic()
+
                 mat_ys = []
-                for i in range(self.sampling[0] * self.sampling[1]):
-                    mat_y, old_y_coeff = self._build_matrix(self.components[1], old_y_coeff)
+                for _ in range(samplings):
+                    mat_y, old_y_coeff = self.build_matrix(self.components[1], old_y_coeff)
                     mat_ys.append(mat_y)
 
-                mat_cb, old_cb_coeff = self._build_matrix(self.components[2], old_cb_coeff)
-                mat_cr, old_cr_coeff = self._build_matrix(self.components[3], old_cr_coeff)
+                mat_cb, old_cb_coeff = self.build_matrix(self.components[2], old_cb_coeff)
+                mat_cr, old_cr_coeff = self.build_matrix(self.components[3], old_cr_coeff)
                 end = time.monotonic()
-                print(f"MCU computed in: {end - start:.3f}s")
-                self.update_output(x, y, mat_ys, mat_cb, mat_cr)
+                self.times[0] += (end - start) * 1000
+                self.times[1] += 1
+                #self.update_output(x, y, mat_ys, mat_cb, mat_cr)
 
     def update_output(self, x, y, mat_ys, mat_cb, mat_cr):
         for i in range(len(mat_ys)):
@@ -143,7 +147,7 @@ class JpegDecoder:
 
                     cb_cr_x = global_x // self.sampling[0]
                     cb_cr_y = global_y // self.sampling[1]
-                    c = self._YCbCr_to_rgb(
+                    c = self.YCbCr_to_rgb(
                         mat_ys[i][xx][yy],
                         mat_cb[cb_cr_x][cb_cr_y],
                         mat_cr[cb_cr_x][cb_cr_y]
@@ -153,7 +157,7 @@ class JpegDecoder:
 
     def decode(self) -> None:
         while True: 
-            marker: int = self._read(2)
+            marker: int = self.read(2)
             if marker == 0xFFD8: # Start Of Image
                 pass
             elif marker == 0xFFD9: # End Of Image
@@ -173,17 +177,17 @@ class JpegDecoder:
                     self.parse_frame_header()
 
                 else:
-                    chunk_length = self._peak(2)
-                    self._skip(chunk_length)
+                    chunk_length = self.peak(2)
+                    self.skip(chunk_length)
 
             if self.bit_pos // 8 >= len(self.buffer):
                 break
 
     @staticmethod
-    def _from_bytes(data: bytes) -> int:
+    def from_bytes(data: bytes) -> int:
         """
         Returns the integer value of the given byte data.
-        It is needed because the numworks runs on python 3.4 and it doesn't implement the `self._from_bytes` method
+        It is needed because the numworks runs on python 3.4 and it doesn't implement the `self.from_bytes` method
         """
         result = 0
         for byte in data:
@@ -191,12 +195,11 @@ class JpegDecoder:
         return result
     
     @staticmethod
-    def _decode_number(code, bits):
+    def decode_number(code, bits):
         l = 2 ** (code - 1)
-        return bits if bits >= l else bits - (2 * l - 1)
+        return bits if bits >= l else bits - (l * 2 - 1)
     
-    @staticmethod
-    def _zigzag(coeffs):
+    def zigzag_transform(self, coeffs):
         zigzag = [
             0, 1, 5, 6, 14, 15, 27, 28,
             2, 4, 7, 13, 16, 26, 29, 42,
@@ -213,17 +216,17 @@ class JpegDecoder:
 
         return zigzag
 
-    def _remove_ff(self):
+    def remove_ff(self):
         new_buffer = bytes()
         while True:
-            current_byte = self._read(1, False)
+            current_byte = self.read(1, False)
 
             if current_byte == b'\xFF':
-                next_byte = self._peak(1)
+                next_byte = self.peak(1)
 
                 if next_byte == 0x00:
                     new_buffer += current_byte
-                    self._skip(1)
+                    self.skip(1)
                 else: break
 
             else: new_buffer += current_byte
@@ -231,7 +234,7 @@ class JpegDecoder:
         self.buffer = new_buffer
         self.bit_pos = 0
     
-    def _get_category(self, huffman_tree: list) -> int:
+    def get_category(self, huffman_tree: list) -> int:
         result = huffman_tree
 
         while isinstance(result, list):
@@ -240,7 +243,7 @@ class JpegDecoder:
         return result
     
     @staticmethod
-    def _YCbCr_to_rgb(Y: int, Cb: int, Cr: int) -> tuple[int, int, int]:
+    def YCbCr_to_rgb(Y: int, Cb: int, Cr: int) -> tuple[int, int, int]:
         r = Y + 1.402 * (Cr - 128)
         g = Y - 0.34414 * (Cb - 128) - 0.714136 * (Cr - 128)
         b = Y + 1.772 * (Cb - 128)
@@ -251,73 +254,92 @@ class JpegDecoder:
 
         return (r, g, b)
 
-    def _idct(self, coeffs):
-        output = [[0 for _ in range(8)] for _ in range(8)]
+    def idct(self, coeffs):
+        output = [[0] * 8 for _ in range(8)]
         for y in range(8):
             for x in range(8):
                 coeff = 0
+
+                idct_y = [self.idct_table[y][n2] for n2 in range(8)]
+                idct_x = [self.idct_table[x][n1] for n1 in range(8)]
+
                 for n1 in range(8):
+                    global_n1 = n1 * 8
                     for n2 in range(8):
-                        coeff += (
-                            coeffs[n1 * 8 + n2]
-                            * self.idct_table[y][n2]
-                            * self.idct_table[x][n1]
-                            )
+                        coeff += coeffs[global_n1 + n2] * idct_y[n2] * idct_x[n1]
                         
                 output[y][x] = round(coeff / 4) + 128
 
         return output
 
-    def _build_matrix(self, component, old_dc_coeff):
+    def build_matrix(self, component, old_dc_coeff):
         quant = self.quant_tables[component["quant_mapping"]]
 
-        category = self._get_category(self.huffman_tables[component["DC"]])
+        category = self.get_category(self.huffman_tables[component["DC"]])
         bits = self.read_bit(category)
-        dc_coeff = self._decode_number(category, bits) + old_dc_coeff
+        dc_coeff = self.decode_number(category, bits) + old_dc_coeff
         
         result = [0] * 64
         result[0] = dc_coeff * quant[0]
         i = 1
+        ac_huffman_table = self.huffman_tables[16 + component["AC"]]
         while i < 64:
-            category = self._get_category(self.huffman_tables[16 + component["AC"]])
+            category = self.get_category(ac_huffman_table)
             if category == 0: break
 
-            if category > 15:
-                i += category >> 4
-                category &= 0x0F
+            i += category >> 4
+            category &= 0x0F
+
+            if i >= 64:
+                break
 
             bits = self.read_bit(category)
-            
-            coeff = self._decode_number(category, bits)
+            coeff = self.decode_number(category, bits)
             result[i] = coeff * quant[i]
             i += 1
 
-        result = self._zigzag(result)
-        result = self._idct(result)
+        result = self.zigzag_transform(result)
+        result = self.idct(result)
         return result, dc_coeff
 
-    def _read(self, nbytes: int, to_int: bool = True) -> bytes | int:
+    def read(self, nbytes: int, to_int: bool = True) -> bytes | int:
         """
         Read a block of data from the buffer and returns it
         """
         pos = self.bit_pos // 8
         data = self.buffer[pos : pos + nbytes]
         self.bit_pos += nbytes * 8
-        return self._from_bytes(data) if to_int else data
+        return self.from_bytes(data) if to_int else data
     
-    def _peak(self, nbytes: int, to_int: bool = True, offset: int = 0) -> bytes | int:
+    def peak(self, nbytes: int, to_int: bool = True, offset: int = 0) -> bytes | int:
         """
         Same as the _read method but doesn't change the _pos attribute
         """
         pos = self.bit_pos // 8
         data = self.buffer[pos + offset : pos + offset + nbytes]
-        return self._from_bytes(data) if to_int else data
+        return self.from_bytes(data) if to_int else data
 
-    def _skip(self, nbytes: int) -> None:
+    def skip(self, nbytes: int) -> None:
         """
         Skip a number of bytes of the buffer
         """
         self.bit_pos += nbytes * 8
 
+
+for _ in range(10000):
+    pass
+
 from out import buffer
-JpegDecoder(buffer)
+mcu_total = 0
+exec_total = 0
+n = 10
+for _ in range(n):
+    start = time.time()
+    dec = JpegDecoder(buffer)
+    end = time.time() - start
+    print(f"MCU average: {dec.times[0] / dec.times[1]:.3f}ms")
+    exec_total += end
+    mcu_total += dec.times[0] / dec.times[1]
+
+print(f"Total MCU average: {mcu_total / n:.3f}ms")
+print(f"Execution time average: {exec_total / n:.3f}s")
