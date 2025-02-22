@@ -13,7 +13,7 @@ def bits_from_lengths(root: list | int, element: int, pos: int) -> bool:
         if pos == 0:
             if len(root) < 2:
                 root.append(element)
-                return True                
+                return True
             return False
 
         for i in [0, 1]:
@@ -55,7 +55,6 @@ class JpegDecoder:
         self.times = [0, 0]
 
         self.decode()
-        #print(f"Average MCU's time: {self.times[0] / self.times[1]:.3f}ms")
 
     def get_bit(self):
         byte = self.buffer[self.bit_pos >> 3]
@@ -306,24 +305,22 @@ class JpegDecoder:
         """
         Read a block of data from the buffer and returns it
         """
-        pos = self.bit_pos // 8
-        data = self.buffer[pos : pos + nbytes]
-        self.bit_pos += nbytes * 8
+        data = self.buffer[:nbytes]
+        self.buffer = self.buffer[nbytes:]
         return self.from_bytes(data) if to_int else data
     
-    def peak(self, nbytes: int, to_int: bool = True, offset: int = 0) -> bytes | int:
+    def peak(self, nbytes: int, to_int: bool = True) -> bytes | int:
         """
         Same as the _read method but doesn't change the _pos attribute
         """
-        pos = self.bit_pos // 8
-        data = self.buffer[pos + offset : pos + offset + nbytes]
+        data = self.buffer[:nbytes]
         return self.from_bytes(data) if to_int else data
 
     def skip(self, nbytes: int) -> None:
         """
         Skip a number of bytes of the buffer
         """
-        self.bit_pos += nbytes * 8
+        self.buffer = self.buffer[nbytes:]
 
 
 for _ in range(10000):
