@@ -49,16 +49,12 @@ def bytes_to_int(data: bytes) -> int:
     return result
 
 def decode_number(category: int, bits: int) -> int:
-    """
-    Decodes the right coefficient given a category and bits. 
-    """
+    """Decodes the right coefficient given a category and bits. """
     l: int = 2 ** (category - 1)
     return bits if bits >= l else bits - (l * 2 - 1)
 
 def YCbCr_to_rgb(Y: int, Cb: int, Cr: int) -> tuple[int, int, int]:
-    """
-    Converts a YCbCr value to rgb
-    """
+    """Converts a YCbCr value to rgb"""
     r = Y + 1.402 * (Cr - 128)
     g = Y - 0.34414 * (Cb - 128) - 0.714136 * (Cr - 128)
     b = Y + 1.772 * (Cb - 128)
@@ -69,10 +65,10 @@ def YCbCr_to_rgb(Y: int, Cb: int, Cr: int) -> tuple[int, int, int]:
 
     return (r, g, b)
 
-class JpegDecoder:
+class JpegViewer:
     def __init__(self, buffer: bytes) -> None:
         """
-        Create a JpegDecoder object and decode a jpeg file buffer.
+        Create a JpegViewer object and decode a jpeg file buffer.
         The buffer size should be around 5KB
         """
         self.buffer: bytes = buffer
@@ -88,9 +84,7 @@ class JpegDecoder:
         self.read_markers()
         
     def read_markers(self) -> None:
-        """
-        This methods reads every marker of the file and exectute the appropriate methods
-        """
+        """This methods reads every marker of the file and exectute the appropriate methods"""
         while True: 
             marker = self.read(2)
             if marker == 0xFFD8: pass # Start Of Image
@@ -194,9 +188,7 @@ class JpegDecoder:
 
     def display_pixels(self, x: int, y: int,
                       y_mats: list[list[int]], cb_mat: list[list[int]], cr_mat: list[list[int]]) -> None:
-        """
-        Displays the pixels of the decoded matrices
-        """
+        """Displays the pixels of the decoded matrices"""
         block_width = 8 * self.sampling[0]
         block_height = 8 * self.sampling[1]
 
@@ -260,9 +252,7 @@ class JpegDecoder:
         return result, dc_coeff
     
     def idct(self, coeffs: list[int]) -> list[list[int]]:
-        """
-        Computes the Inverse Discrete Cosine Transform and shifts back the transformed value by 128
-        """
+        """Computes the Inverse Discrete Cosine Transform and shifts back the transformed value by 128"""
         output = [[0] * 8 for _ in range(8)]
         for y in range(8):
             for x in range(8):
@@ -281,9 +271,7 @@ class JpegDecoder:
         return output
         
     def rearange_coeffs(self, coeffs: list[int]) -> list[int]:
-        """
-        Changes the order of the coefficients to be in a zigzag order
-        """
+        """Changes the order of the coefficients to be in a zigzag order"""
         zigzag = [ # Initial indices
             0, 1, 5, 6, 14, 15, 27, 28,
             2, 4, 7, 13, 16, 26, 29, 42,
@@ -301,9 +289,7 @@ class JpegDecoder:
         return zigzag
 
     def read_category(self, huffman_tree: list) -> int:
-        """
-        Returns the next category of the buffer using the passed Huffman tree
-        """
+        """Returns the next category of the buffer using the passed Huffman tree"""
         result = huffman_tree
 
         while isinstance(result, list):
@@ -312,32 +298,24 @@ class JpegDecoder:
         return result
 
     def read(self, nbytes: int, to_bytes: bool = False) -> bytes | int:
-        """
-        Reads a block of data from the file buffer, returns it as an integer or bytes and move the pointer's position.
-        """
+        """Reads a block of data from the file buffer, returns it as an integer or bytes and move the pointer's position."""
         pos = self.bit_pos // 8
         data = self.buffer[pos : pos + nbytes]
         self.bit_pos += nbytes * 8
         return data if to_bytes else bytes_to_int(data)
     
     def peak(self, nbytes: int, to_bytes: bool = False) -> bytes | int:
-        """
-        Reads a block of data from the file buffer, returns it as an integer or bytes and doesn't change the pointer position.
-        """
+        """Reads a block of data from the file buffer, returns it as an integer or bytes and doesn't change the pointer position."""
         pos = self.bit_pos // 8
         data = self.buffer[pos : pos + nbytes]
         return data if to_bytes else bytes_to_int(data)
 
     def skip(self, nbytes: int) -> None:
-        """
-        Move the buffer pointer by n bytes
-        """
+        """Moves the buffer pointer by n bytes"""
         self.bit_pos += nbytes * 8
 
     def get_bit(self) -> int:
-        """
-        Returns the value of the next bit of the buffer
-        """
+        """Returns the value of the next bit of the buffer"""
         self.skip_ff00()
 
         byte = self.buffer[self.bit_pos >> 3]
@@ -346,9 +324,7 @@ class JpegDecoder:
         return bit
     
     def skip_ff00(self) -> None:
-        """
-        Skips the 0x00 byte when the previous byte is 0xff (byte stuffing in the scan section)
-        """
+        """Skips the 0x00 byte when the previous byte is 0xff (byte stuffing in the scan section)"""
         if (self.bit_pos & 0x07) == 0: # If this is a new byte
             byte_pos = self.bit_pos >> 3
 
@@ -356,13 +332,12 @@ class JpegDecoder:
                 self.bit_pos += 8 # Skip the 0x00 byte
 
     def read_bits(self, nbits: int) -> int:
-        """
-        Reads n bits from the buffer and returns the final value
-        """
+        """Reads n bits from the buffer and returns the final value"""
         result = 0
         for _ in range(nbits):
             result = (result << 1) | self.get_bit()
         return result
 
-from out import buffer
-JpegDecoder(buffer)
+def open(buffer: bytes) -> None:
+    """Simple function that makes a new instance of the JpegViewer class using the passed buffer"""
+    JpegViewer(buffer)

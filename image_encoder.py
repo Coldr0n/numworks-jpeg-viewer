@@ -1,11 +1,17 @@
 from PIL import Image
 from io import BytesIO
+from os import path
 
-def create_jpeg_pyfile(image_path: str, output_file_name: str, strech: bool = False) -> bytes:
+def encode_image(image_path: str,
+                 output_filepath: str,
+                 max_kb_buffer_size: float = 15.0,
+                 max_kb_file_size: float = 30.0,
+                 strech: bool = False,
+                 show_image: bool = False) -> None:
     """
-    This function takes an image path and scale it to the numworks viewport size.
-    It then convert and compress the image into a jpeg file and write the image's byte into a python file.
-    Returns the bytes saved.
+    This function takes an image and either strech it or adds black bars to fit into the numworks viewport.
+    It will then compress the image to a jpeg file and adjust the quality to meet the appropriate buffer and file size.
+    The resulting bytes are then written as bytes() into the output file.
     """
     NUMWORKS_SIZE = 320, 222
     with Image.open(image_path) as img:
@@ -30,22 +36,25 @@ def create_jpeg_pyfile(image_path: str, output_file_name: str, strech: bool = Fa
 
             # Paste the resized img onto the blank image at the center
             out_img.paste(img, ((NUMWORKS_SIZE[0] - new_width) // 2,
-                                    (NUMWORKS_SIZE[1] - new_height) // 2))
+                                (NUMWORKS_SIZE[1] - new_height) // 2))
         
-        MAX_KB_BUFFER_SIZE = 6.5
         quality = 95
         while quality > 0:
             output = BytesIO()
             out_img.save(output, format="JPEG", quality=quality, optimize=True)
             
-            file_size_kb = output.tell() / 1024 # Convert bytes to kb
-            if file_size_kb < MAX_KB_BUFFER_SIZE: break
+            buffer_size_kb = output.tell() / 1024 # Convert bytes to kb
+            if buffer_size_kb < max_kb_buffer_size:
+                with open(output_filepath, "w") as out_file:
+                    out_file.write(f"b={output.getvalue()}")
+                    
+                file_size_kb = path.getsize(output_filepath) / 1024
+                if file_size_kb < max_kb_file_size: break
 
             quality -= 5
-        else: print(f"Warning! file size might exceed {MAX_KB_BUFFER_SIZE}KB.")
-        
-        with open(output_file_name, "w") as out_file:
-            out_file.write("buffer = " + str(output.getvalue()))
-            print(f"Image saved successfully at [{output_file_name}]\nQuality: {quality}, size: {file_size_kb:.2f}KB")
 
-create_jpeg_pyfile("images/rabelais.jpg", "out.py")
+        print(f"Image saved successfully at [{output_filepath}]\nQuality: {quality}, buffer size: {buffer_size_kb:.2f}KB; file size: {file_size_kb:.2f}KB")
+        if show_image: Image.open(output).show()
+
+if __name__ == '__main__':
+    encode_image("images/photo.jpg", "photo.py")
