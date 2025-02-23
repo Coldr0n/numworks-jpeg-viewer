@@ -101,7 +101,7 @@ class JpegViewer:
                 self.parse_scan_header()
                 self.scan()
 
-            else: self.skip(self.peak(2)) # Skip the section
+            else: self.skip(self.read(2, peak=True)) # Skip the section
 
             # Breaks the loop if there is no data left after reading a section
             if self.bit_pos // 8 >= len(self.buffer): break
@@ -143,7 +143,7 @@ class JpegViewer:
         
         for _ in range(nb_components):
             component_id = self.read(1)
-            self.sampling[0] = max(self.sampling[0], self.peak(1) >> 4)
+            self.sampling[0] = max(self.sampling[0], self.read(1, peak=True) >> 4)
             self.sampling[1] = max(self.sampling[1], self.read(1) & 0xF)
             self.components[component_id] = {b"quant_mapping": self.read(1)}
 
@@ -156,7 +156,7 @@ class JpegViewer:
         nb_components = self.read(1)
         for _ in range(nb_components):
             component_id = self.read(1)
-            self.components[component_id][b"DC"] = self.peak(1) >> 4 # Gets the DC table index
+            self.components[component_id][b"DC"] = self.read(1, peak=True) >> 4 # Gets the DC table index
             self.components[component_id][b"AC"] = self.read(1) & 0xF # Gets the AC table index
 
         self.skip(3) # Meaningless data
@@ -170,7 +170,6 @@ class JpegViewer:
         self.idct_table = [[cos((pi / 8) * (p + 0.5) * n) * (1 / sqrt(2) if n == 0 else 1) for n in range(8)] for p in range(8)]
 
         old_y_coeff = old_cb_coeff = old_cr_coeff = 0
-
         samplings = self.sampling[0] * self.sampling[1]
 
         # This loop runs for every MCU of the file
@@ -297,17 +296,11 @@ class JpegViewer:
 
         return result
 
-    def read(self, nbytes: int, to_bytes: bool = False) -> bytes | int:
-        """Reads a block of data from the file buffer, returns it as an integer or bytes and move the pointer's position."""
+    def read(self, nbytes: int, to_bytes: bool = False, peak: bool = False) -> bytes | int:
+        """Reads a block of data from the file buffer, returns it as an integer or bytes and move the pointer's position if peak is set to False"""
         pos = self.bit_pos // 8
         data = self.buffer[pos : pos + nbytes]
-        self.bit_pos += nbytes * 8
-        return data if to_bytes else bytes_to_int(data)
-    
-    def peak(self, nbytes: int, to_bytes: bool = False) -> bytes | int:
-        """Reads a block of data from the file buffer, returns it as an integer or bytes and doesn't change the pointer position."""
-        pos = self.bit_pos // 8
-        data = self.buffer[pos : pos + nbytes]
+        if not peak: self.bit_pos += nbytes * 8
         return data if to_bytes else bytes_to_int(data)
 
     def skip(self, nbytes: int) -> None:
