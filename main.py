@@ -172,8 +172,6 @@ class JpegDecoder:
         Start Of Scan (SOS) section.
         Interpret and displays the actual image data that is inside the jpeg file
         """
-        self.remove_ff00()
-
         # Precompute table for the inverse decrete cosine transform
         self.idct_table = [[cos((pi / 8) * (p + 0.5) * n) * (1 / sqrt(2) if n == 0 else 1) for n in range(8)] for p in range(8)]
 
@@ -302,28 +300,6 @@ class JpegDecoder:
 
         return zigzag
 
-    def remove_ff00(self) -> None:
-        """
-        This method undoes byte stuffing.
-        It removes the 0x00 byte after every 0xff that is present is the scan data.
-        """
-        new_buffer = bytes()
-        while True:
-            current_byte = self.read(1, True)
-
-            if current_byte == b'\xff':
-                next_byte = self.peak(1)
-
-                if next_byte == 0x00:
-                    new_buffer += current_byte
-                    self.skip(1)
-                else: break # Breaking when another marker is encoutered (End Of Image)
-
-            else: new_buffer += current_byte
-
-        self.buffer = new_buffer
-        self.bit_pos = 0
-
     def read_category(self, huffman_tree: list) -> int:
         """
         Returns the next category of the buffer using the passed Huffman tree
@@ -337,33 +313,47 @@ class JpegDecoder:
 
     def read(self, nbytes: int, to_bytes: bool = False) -> bytes | int:
         """
-        Reads a block of data from the file buffer, returns it as an integer or bytes and removes the read part from the buffer.
+        Reads a block of data from the file buffer, returns it as an integer or bytes and move the pointer's position.
         """
-        data = self.buffer[:nbytes]
-        self.buffer = self.buffer[nbytes:]
+        pos = self.bit_pos // 8
+        data = self.buffer[pos : pos + nbytes]
+        self.bit_pos += nbytes * 8
         return data if to_bytes else bytes_to_int(data)
     
     def peak(self, nbytes: int, to_bytes: bool = False) -> bytes | int:
         """
-        Reads a block of data from the file buffer, returns it as an integer or bytes and doesn't change the buffer data.
+        Reads a block of data from the file buffer, returns it as an integer or bytes and doesn't change the pointer position.
         """
-        data = self.buffer[:nbytes]
+        pos = self.bit_pos // 8
+        data = self.buffer[pos : pos + nbytes]
         return data if to_bytes else bytes_to_int(data)
 
     def skip(self, nbytes: int) -> None:
         """
-        Skip a number of bytes of the buffer
+        Move the buffer pointer by n bytes
         """
-        self.buffer = self.buffer[nbytes:]
+        self.bit_pos += nbytes * 8
 
     def get_bit(self) -> int:
         """
         Returns the value of the next bit of the buffer
         """
+        self.skip_ff00()
+
         byte = self.buffer[self.bit_pos >> 3]
         bit = (byte >> (7 - self.bit_pos & 0x07)) & 1
         self.bit_pos += 1
         return bit
+    
+    def skip_ff00(self) -> None:
+        """
+        Skips the 0x00 byte when the previous byte is 0xff (byte stuffing in the scan section)
+        """
+        if (self.bit_pos & 0x07) == 0: # If this is a new byte
+            byte_pos = self.bit_pos >> 3
+
+            if self.buffer[byte_pos] == 0x00 and self.buffer[byte_pos - 1] == 0xff:
+                self.bit_pos += 8 # Skip the 0x00 byte
 
     def read_bits(self, nbits: int) -> int:
         """

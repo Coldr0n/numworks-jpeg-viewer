@@ -32,7 +32,7 @@ def create_jpeg_pyfile(image_path: str, output_file_name: str, strech: bool = Fa
             out_img.paste(img, ((NUMWORKS_SIZE[0] - new_width) // 2,
                                     (NUMWORKS_SIZE[1] - new_height) // 2))
         
-        MAX_KB_BUFFER_SIZE = 5
+        MAX_KB_BUFFER_SIZE = 6.5
         quality = 95
         while quality > 0:
             output = BytesIO()
@@ -48,4 +48,4 @@ def create_jpeg_pyfile(image_path: str, output_file_name: str, strech: bool = Fa
             out_file.write("buffer = " + str(output.getvalue()))
             print(f"Image saved successfully at [{output_file_name}]\nQuality: {quality}, size: {file_size_kb:.2f}KB")
 
-create_jpeg_pyfile("images/sunset.png", "out.py", False)
+create_jpeg_pyfile("images/rabelais.jpg", "out.py")
