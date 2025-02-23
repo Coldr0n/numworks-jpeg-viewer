@@ -70,21 +70,23 @@ def YCbCr_to_rgb(Y: int, Cb: int, Cr: int) -> tuple[int, int, int]:
     return (r, g, b)
 
 class JpegDecoder:
-    # Precomputed table for the inverse decrete cosine transform
-    idct_table = [[cos((pi / 8) * (p + 0.5) * n) * (1 / sqrt(2) if n == 0 else 1) for n in range(8)] for p in range(8)]
-    
     def __init__(self, buffer: bytes) -> None:
+        """
+        Create a JpegDecoder object and decode a jpeg file buffer.
+        The buffer size should be around 5KB
+        """
         self.buffer: bytes = buffer
         self.bit_pos: int = 0
-        self.components = {} # Stores info about the components
+        self.components: dict[int, dict[bytes, int]] = {} # Stores info about the components
         self.huffman_tables: dict[int, list[int]] = {}
         self.quant_tables: dict[int, bytes] = {}
         self.sampling = [0, 0]
         self.width = 0
         self.height = 0
+        self.idct_table: list[list[int]] = []
 
         self.read_markers()
-
+        
     def read_markers(self) -> None:
         """
         This methods reads every marker of the file and exectute the appropriate methods
@@ -93,7 +95,6 @@ class JpegDecoder:
             marker = self.read(2)
             if marker == 0xFFD8: pass # Start Of Image
             elif marker == 0xFFD9:
-                print("End of image")
                 break # End Of Image
 
             elif marker == 0xFFC4: self.define_huffman_table()
@@ -150,7 +151,7 @@ class JpegDecoder:
             component_id = self.read(1)
             self.sampling[0] = max(self.sampling[0], self.peak(1) >> 4)
             self.sampling[1] = max(self.sampling[1], self.read(1) & 0xF)
-            self.components[component_id] = {"quant_mapping": self.read(1)}
+            self.components[component_id] = {b"quant_mapping": self.read(1)}
 
     def parse_scan_header(self) -> None:
         """
@@ -161,8 +162,8 @@ class JpegDecoder:
         nb_components = self.read(1)
         for _ in range(nb_components):
             component_id = self.read(1)
-            self.components[component_id]["DC"] = self.peak(1) >> 4 # Gets the DC table index
-            self.components[component_id]["AC"] = self.read(1) & 0xF # Gets the AC table index
+            self.components[component_id][b"DC"] = self.peak(1) >> 4 # Gets the DC table index
+            self.components[component_id][b"AC"] = self.read(1) & 0xF # Gets the AC table index
 
         self.skip(3) # Meaningless data
 
@@ -172,7 +173,10 @@ class JpegDecoder:
         Interpret and displays the actual image data that is inside the jpeg file
         """
         self.remove_ff00()
-        
+
+        # Precompute table for the inverse decrete cosine transform
+        self.idct_table = [[cos((pi / 8) * (p + 0.5) * n) * (1 / sqrt(2) if n == 0 else 1) for n in range(8)] for p in range(8)]
+
         old_y_coeff = old_cb_coeff = old_cr_coeff = 0
 
         samplings = self.sampling[0] * self.sampling[1]
@@ -217,29 +221,27 @@ class JpegDecoder:
                     # Indices for the Cb or Cr matrices
                     sampled_x = global_block_x // self.sampling[0]
                     sampled_y = global_block_y // self.sampling[1]
-                    c = YCbCr_to_rgb(
-                        y_mats[i][xx][yy],
-                        cb_mat[sampled_x][sampled_y],
-                        cr_mat[sampled_x][sampled_y]
-                    )
 
-                    set_pixel(pixel_x, pixel_y, c)
+                    color = YCbCr_to_rgb(y_mats[i][xx][yy], 
+                                         cb_mat[sampled_x][sampled_y],
+                                         cr_mat[sampled_x][sampled_y])
+                    set_pixel(pixel_x, pixel_y, color)
 
     def build_matrix(self, component: list[int], old_dc_coeff: int) -> tuple[list[list[int]], int]:
         """
         Reads data to build entirely the 8 * 8 matrix of a component.
         It decodes the DC and AC coeffs, dequantize them, rearange the values, and perform an idct.
         """
-        quant_table = self.quant_tables[component["quant_mapping"]]
+        quant_table = self.quant_tables[component[b"quant_mapping"]]
 
-        category = self.read_category(self.huffman_tables[component["DC"]])
+        category = self.read_category(self.huffman_tables[component[b"DC"]])
         bits = self.read_bits(category)
         dc_coeff = decode_number(category, bits) + old_dc_coeff
         
         result = [0] * 64
         result[0] = dc_coeff * quant_table[0]
         i = 1
-        ac_huffman_table = self.huffman_tables[16 + component["AC"]]
+        ac_huffman_table = self.huffman_tables[16 + component[b"AC"]]
         while i < 64:
             category = self.read_category(ac_huffman_table)
             if category == 0: break
@@ -275,7 +277,7 @@ class JpegDecoder:
                     global_n1 = n1 * 8
                     for n2 in range(8):
                         coeff += coeffs[global_n1 + n2] * idct_y[n2] * idct_x[n1]
-                        
+
                 output[y][x] = round(coeff / 4) + 128
 
         return output
@@ -321,7 +323,7 @@ class JpegDecoder:
 
         self.buffer = new_buffer
         self.bit_pos = 0
-    
+
     def read_category(self, huffman_tree: list) -> int:
         """
         Returns the next category of the buffer using the passed Huffman tree
@@ -371,9 +373,6 @@ class JpegDecoder:
         for _ in range(nbits):
             result = (result << 1) | self.get_bit()
         return result
-
-for _ in range(10000):
-    pass
 
 from out import buffer
 JpegDecoder(buffer)
