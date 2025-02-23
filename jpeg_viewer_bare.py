@@ -76,7 +76,7 @@ class JpegViewer:
     def define_huffman_table(self):
         self.skip(2) 
         table_info = self.read(1)
-        lengths: int = [self.read(1) for _ in range(16)]
+        lengths = [self.read(1) for _ in range(16)]
         elements = []
 
         for byte_length in lengths:
