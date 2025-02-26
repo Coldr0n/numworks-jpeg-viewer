@@ -334,3 +334,13 @@ class JpegViewer:
 def open(buffer: bytes) -> None:
     """Simple function that makes a new instance of the JpegViewer class using the passed buffer"""
     JpegViewer(buffer)
+
+if __name__ == '__main__':
+    file_name = input("Enter the name of the python module where the image is located: ")
+    try: open(__import__(file_name).b)
+    except ModuleNotFoundError:
+        print("Error: the module", file_name, "was not found")
+    except AttributeError:
+        print("Error: couldn't find the image data, it should be in a variable named 'b'")
+
+    print("Program finished.")

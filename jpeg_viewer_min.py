@@ -1,5 +1,4 @@
-from math import cos,pi,sqrt,ceil
-from kandinsky import set_pixel
+from math import cos,pi,sqrt,ceil;from kandinsky import set_pixel
 z=range;w=round;nc=isinstance
 def ch(l,e):
  t=[];j=0
@@ -106,3 +105,4 @@ class J:
   for _ in z(n):r=(r<<1)|s.gb()
   return r
 def open(b):J(b)
+if __name__=='__main__':open(__import__(input("Img module name: ")).b)

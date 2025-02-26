@@ -57,4 +57,6 @@ def encode_image(image_path: str,
         if show_image: Image.open(output).show()
 
 if __name__ == '__main__':
-    encode_image("images/photo.jpg", "photo.py")
+    img_path = input("Enter the path to your image: ")
+    out_path = input("Enter the path for the output python file: ") 
+    encode_image(img_path, out_path)
