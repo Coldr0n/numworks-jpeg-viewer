@@ -105,4 +105,3 @@ class J:
   for _ in z(n):r=(r<<1)|s.gb()
   return r
 def open(b):J(b)
-if __name__=='__main__':open(__import__(input("Img module name: ")).b)

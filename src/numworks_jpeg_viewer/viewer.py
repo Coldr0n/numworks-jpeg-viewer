@@ -336,10 +336,11 @@ def open(buffer: bytes) -> None:
     JpegViewer(buffer)
 
 if __name__ == '__main__':
-    file_name = input("Enter the name of the python module where the image is located: ")
+    import sys
+    file_name = sys.argv[1]
     try: open(__import__(file_name).b)
     except ModuleNotFoundError:
-        print("Error: the module", file_name, "was not found")
+        print("Error:", file_name, "was not found (it has to be in the same directory as this program)")
     except AttributeError:
         print("Error: couldn't find the image data, it should be in a variable named 'b'")
 

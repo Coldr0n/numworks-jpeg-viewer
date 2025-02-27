@@ -2,3 +2,4 @@ images/
 .venv/
 __pycache__/
 dist/
+.env
