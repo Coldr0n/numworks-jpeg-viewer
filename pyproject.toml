@@ -1,0 +1,24 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "numworks_jpeg_viewer"
+version = "0.0.1"
+authors = [
+  { name="Martin Garel", email="martin.garel.528@gmail.com" },
+]
+description = "A python jpeg viewer made to run on a Numworks"
+readme = "README.md"
+requires-python = ">=3.8"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Operating System :: OS Independent",
+]
+license = "MIT"
+license-files = ["LICEN[CS]E*"]
+
+[project.urls]
+Homepage = "https://github.com/Coldr0n/numworks-jpeg-viewer"
+Issues = "https://github.com/Coldr0n/numworks-jpeg-viewer/issues"
+Numworks-download = "https://my.numworks.com/python/martin-garel-528/jpeg_viewer"
