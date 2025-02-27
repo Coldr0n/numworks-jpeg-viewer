@@ -4,16 +4,16 @@ It decodes a jpeg file encoded as [bytes](https://docs.python.org/3/library/stdt
 The decoder was made for lossy jpeg and does not support lossless compression.
 
 ## Installation
-You can use [pip](https://pip.pypa.io/en/stable/) to install numworks jpeg viewer with utility scripts to encode images.
+You can use pip to install [numworks jpeg viewer](https://pypi.org/project/numworks-jpeg-viewer) on your pc to encode and preview the images that you want.
 ```bash
-pip install numworks_jpeg_viewer
+pip install numworks-jpeg-viewer
 ```
-To send the script to your numworks you can go to https://my.numworks.com/python/martin-garel-528/jpeg_viewer  
-or https://my.numworks.com/python/martin-garel-528/jpeg_viewer_min to get a smaller version of the script so it takes less space on your calculator.
+To send the jpeg viewer script to your numworks you can go to https://my.numworks.com/python/martin-garel-528/jpeg_viewer  
+or https://my.numworks.com/python/martin-garel-528/jpeg_viewer_min (smaller version of the script so it takes less space on your calculator).
 
 ## Usage
 ### Encoding an image
-To use the viewer you first have to encode any image as jpeg into a python file. To do that you can run the `image_encoder.py` file with various parameters to choose where and how do you want to encode an image.
+To use the viewer you first have to encode an image as jpeg into a python file. To do that you can run the `image_encoder.py` file with various parameters to choose where and how do you want to encode an image.
 ```bash
 python3 -m numworks_jpeg_viewer.image_encoder [options] [image_path] [output_path]
 ```
