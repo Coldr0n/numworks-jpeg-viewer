@@ -15,7 +15,7 @@ or https://my.numworks.com/python/martin-garel-528/jpeg_viewer_min (smaller vers
 ### Encoding an image
 To use the viewer you first have to encode an image as jpeg into a python file. To do that you can run the `image_encoder.py` file with various parameters to choose where and how do you want to encode an image.
 ```bash
-python3 -m numworks_jpeg_viewer.image_encoder [options] [image_path] [output_path]
+python3 -m numworks_viewer.image_encoder [options] [image_path] [output_path]
 ```
 #### Options
 For the maximum buffer and file size paramters, the program will reduce the quality of the jpeg image until they are under the provided sizes.
@@ -26,11 +26,11 @@ For the maximum buffer and file size paramters, the program will reduce the qual
 
 #### Example
 ```bash
-python3 -m numworks_jpeg_viewer.image_encoder -bs=10 -fs=25 -s -o images/my_image.png my_image.py
+python3 -m numworks_viewer.image_encoder -bs=10 -fs=25 -s -o images/my_image.png my_image.py
 ```
 You can also use the `encode_image` function from the module in a python file (the parameters of the function are the same as listed before).
 ```python
-from numworks_jpeg_viewer.image_encoder import encode_image
+from numworks_viewer.image_encoder import encode_image
 encode_image("path/to/your/image.png", "path/to/the/output.py")
 ```
 
