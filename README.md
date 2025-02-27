@@ -36,7 +36,7 @@ encode_image("path/to/your/image.png", "path/to/the/output.py")
 
 ### Viewing the image
 Once the image is compressed into a python file, you have to send it to your calculator.  
-Frist, make your own numworks script with the python image file copied into it, and send it to your calculator (see [this page](https://www.numworks.com/support/connect/script/) if you struggle).  
+First, make your own numworks script with the python image file copied into it, and send it to your calculator (see [this page](https://www.numworks.com/support/connect/script/) if you struggle).  
 Then, to see the image, import the `jpeg_viewer.py` and your image into the numworks python shell and use the `open` function with the variable containing the bytes (`b`):  
 ![screenshot](https://github.com/user-attachments/assets/b22b8fae-b01e-4aa8-adaf-f30757d2e242)  
 On pc, you can do the same in the interpreter or use this command.
