@@ -3,13 +3,13 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "numworks_jpeg_viewer"
-version = "0.0.1"
+name = "numworks-jpeg-viewer"
+version = "0.0.3"
 authors = [
   { name="Martin Garel", email="martin.garel.528@gmail.com" },
 ]
 description = "A python jpeg viewer made to run on a Numworks"
-readme = "README.md"
+readme = "README.package.md"
 requires-python = ">=3.8"
 classifiers = [
     "Programming Language :: Python :: 3",
