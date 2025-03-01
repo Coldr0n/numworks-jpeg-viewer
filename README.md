@@ -4,10 +4,17 @@ It decodes a jpeg file encoded as [bytes](https://docs.python.org/3/library/stdt
 The decoder was made for lossy jpeg and does not support lossless compression.
 
 ## Installation
-You can use pip to install [numworks jpeg viewer](https://pypi.org/project/numworks-jpeg-viewer) on your pc to encode and preview the images that you want.
+
+### Installing python
+To use the viewer you have to have python installed on your computer. You can dowload the latest version of python here: https://www.python.org/downloads/ 
+
+### Installing the python package
+You can use pip to install [numworks jpeg viewer](https://pypi.org/project/numworks-jpeg-viewer) on your pc to encode and preview the images that you want, run the following command on a terminal.
 ```bash
 pip install numworks-jpeg-viewer
 ```
+
+### Sending the script to the numworks
 To send the jpeg viewer script to your numworks you can go to https://my.numworks.com/python/martin-garel-528/jpeg_viewer  
 or https://my.numworks.com/python/martin-garel-528/jpeg_viewer_min (smaller version of the script so it takes less space on your calculator).
 
@@ -34,12 +41,13 @@ from numworks_viewer.image_encoder import encode_image
 encode_image("path/to/your/image.png", "path/to/the/output.py")
 ```
 
-### Viewing the image
+### Viewing the image on the numworks
 Once the image is compressed into a python file, you have to send it to your calculator.  
 First, make your own numworks script with the python image file copied into it, and send it to your calculator (see [this page](https://www.numworks.com/support/connect/script/) if you struggle).  
 Then, to see the image, import the `jpeg_viewer.py` and your image into the numworks python shell and use the `open` function with the variable containing the bytes (`b`):  
-![screenshot](https://github.com/user-attachments/assets/b22b8fae-b01e-4aa8-adaf-f30757d2e242)  
-On pc, you can do the same in the interpreter or use this command.
+![screenshot](https://github.com/user-attachments/assets/b22b8fae-b01e-4aa8-adaf-f30757d2e242)
+### Viewing the image on your pc
+On pc, you can also import the two python modules on a python interpreter or use this command:
 ```bash
 python3 -m numworks_viewer.viewer [module_name]
 ```
