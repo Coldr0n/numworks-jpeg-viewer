@@ -9,7 +9,7 @@ The decoder was made for lossy jpeg and does not support lossless compression.
 To use the viewer you first have to have python installed on your computer. You can dowload the latest version of python here: https://www.python.org/downloads/ 
 
 ### Installing the python package
-You can use pip to install [numworks jpeg viewer](https://pypi.org/project/numworks-jpeg-viewer) on your pc to encode and preview the images that you want, run the following command on a terminal.
+You can use pip to install [numworks jpeg viewer](https://pypi.org/project/numworks-jpeg-viewer) on your pc to encode and preview the images that you want, run the following command in a terminal.
 ```bash
 pip install numworks-jpeg-viewer
 ```
